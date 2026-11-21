@@ -1,4 +1,4 @@
-# csv-reader-speed — WASM SIMD reader (v2)
+# csv-reader-speed — WASM SIMD reader (v3 redesign)
 
 [![make.fun](https://make.fun/badge/csv-reader-speed-01-run-20261121.svg)](https://make.fun/c/csv-reader-speed-01-run-20261121)
 [![rank](https://make.fun/badge/csv-reader-speed-01-run-20261121/damijune31-alt/csv-reader-speed-01-run-20261121-v2/rank.svg)](https://make.fun/c/csv-reader-speed-01-run-20261121)
@@ -13,10 +13,12 @@ raw `cases.json` bytes in, `answers.json` bytes out — no `JSON.parse` /
 
 - `parser.wat` — the whole solver in hand-written WebAssembly Text.
   It does the JSON layer itself (finds each case's `text` string, unescapes it
-  into scratch memory, reads `header`), parses the CSV with SIMD v128
-  delimiter scans (`i8x16.eq` + `i8x16.bitmask` + `i32.ctz`), and emits the
-  answers JSON straight into the output buffer. Three passes over the data
-  (unescape → parse → emit), each 16 bytes at a time where the bytes allow.
+  into scratch memory, reads `header`), parses the CSV into a small span
+  table with SIMD v128 delimiter scans (`i8x16.eq` + `i8x16.bitmask` +
+  `i32.ctz`, 64 bytes at a time), then emits the answers JSON straight from
+  the spans into the output buffer. Two passes over the data instead of
+  three: the JSON unescape is fused with the scan, and no row objects are
+  ever materialised.
 - `solve.js` — generated wrapper: the compiled WASM module is embedded as
   base64 (no separate `.wasm` file) and instantiated at runtime.
   Exports `run(len) → outLen`; memory layout is fixed at 2048 pages.
@@ -43,9 +45,10 @@ node main.ts   # MAKEFUN_INPUT_DIR / MAKEFUN_OUTPUT_DIR, like the kit harness
 - Kit scorer on the practice set: **6/6 cases passed**
 - Differential test vs the reference reader: **75/75 identical**
   (6 practice + 49 hand-written edge cases + 20 generator-drawn cases)
-- `run()` only, median: **92.5 ms** vs baseline `run()` median **508.9 ms**
-  (5.5×; full `main.ts` wall ~265 ms vs baseline ~1400 ms)
-- WASM module: **5,653 bytes**; `solve.js`: 8,164 bytes
+- `run()` only, median: **59.9 ms** vs baseline `run()` median **581.7 ms**
+  (9.7×; submitted v1 was 86 ms, v2 was 92.5 ms — the redesign is 1.44×
+  faster than v1; full `main.ts` wall ~254 ms vs baseline ~1407 ms)
+- WASM module: **5,990 bytes**; `solve.js`: 8,612 bytes
 
 ## License
 
